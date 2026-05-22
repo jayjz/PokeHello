@@ -172,6 +172,73 @@ npm start
 pm2 start ecosystem.config.js
 ```
 
+
+## First Run Checklist
+
+After completing installation, verify everything works:
+
+- [ ] **Node.js version check**
+  ```bash
+  node --version  # Should be 18+
+  npm --version
+  ```
+
+- [ ] **System dependencies installed**
+  ```bash
+  chromium-browser --version
+  which xvfb
+  ```
+
+- [ ] **Playwright browsers installed**
+  ```bash
+  npx playwright --version
+  ls ~/.cache/ms-playwright/  # Should show chromium directory
+  ```
+
+- [ ] **Environment configured**
+  ```bash
+  ls -la .env  # File exists
+  grep DISCORD_WEBHOOK_URL .env  # Has value (not empty)
+  ```
+
+- [ ] **Dependencies installed**
+  ```bash
+  ls node_modules | wc -l  # Should show 300+ packages
+  ```
+
+- [ ] **Test basic functionality**
+  ```bash
+  npm test  # Should show usage info without errors
+  ```
+
+- [ ] **GUI starts successfully**
+  ```bash
+  timeout 5 npm run gui &
+  sleep 3
+  curl -s http://localhost:3000/health | grep -q "ok" && echo "✅ Health check passed"
+  pkill -f "node.*gui/server.js"
+  ```
+
+- [ ] **PM2 installed and configured**
+  ```bash
+  pm2 --version
+  pm2 list  # Should show processes after starting
+  ```
+
+- [ ] **Logs directory exists**
+  ```bash
+  ls -la logs/  # Should exist after first run
+  ```
+
+**If all checks pass, you're ready to start monitoring!**
+
+```bash
+npm start  # Start all monitors
+# or
+pm2 start ecosystem.config.js  # Production mode
+```
+
+
 ## Troubleshooting
 
 ### Error: "ChromePathNotSetError" or "Could not start Xvfb"
