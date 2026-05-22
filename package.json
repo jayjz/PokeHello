@@ -6,18 +6,29 @@
   "scripts": {
     "start": "node index.js",
     "monitor": "node monitors/pokemon-center.js",
+    "monitor:pokemon": "node monitors/pokemon-center.js",
+    "monitor:target": "node monitors/target.js",
+    "monitor:walmart": "node monitors/walmart.js",
+    "monitor:all": "concurrently \"npm run monitor:pokemon\" \"npm run monitor:target\" \"npm run monitor:walmart\"",
     "test": "node -e \"require('./monitors/pokemon-center').checkStock().then(() => console.log('Test complete')).catch(console.error)\"",
     "dev": "nodemon monitors/pokemon-center.js"
   },
-  "keywords": ["pokemon", "tcg", "bot", "sniping"],
+  "keywords": [
+    "pokemon",
+    "tcg",
+    "bot",
+    "sniping"
+  ],
   "author": "jayjz",
   "license": "MIT",
   "dependencies": {
-    "playwright": "^1.40.0",
     "axios": "^1.6.0",
-    "node-cron": "^3.0.3",
+    "discord.js": "^14.14.1",
     "dotenv": "^16.3.1",
-    "discord.js": "^14.14.1"
+    "node-cron": "^3.0.3",
+    "playwright": "^1.40.0",
+    "playwright-extra": "^4.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
