@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node index.js",
     "monitor": "node monitors/pokemon-center.js",
-    "dev": "nodemon index.js"
+    "test": "node -e \"require('./monitors/pokemon-center').checkStock().then(() => console.log('Test complete')).catch(console.error)\"",
+    "dev": "nodemon monitors/pokemon-center.js"
   },
   "keywords": ["pokemon", "tcg", "bot", "sniping"],
   "author": "jayjz",

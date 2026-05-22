@@ -15,6 +15,7 @@ async function sendDiscordAlert(embed) {
         description: embed.description,
         url: embed.url,
         color: embed.color || 0x0099ff,
+        fields: embed.fields || [],
         timestamp: new Date().toISOString(),
         footer: {
           text: 'PokeHello TCG Bot'
