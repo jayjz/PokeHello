@@ -1,3 +1,4 @@
+const { gotScraping } = require('got-scraping');
 const { connect } = require('puppeteer-real-browser');
 const { CookieJar } = require('tough-cookie');
 const { sendDiscordAlert } = require('../utils/alerts');
@@ -15,7 +16,6 @@ class BaseMonitor {
     this.cookieJar = new CookieJar();
     this.apiClient = null;
     this.sessionHeaders = {};
-    this.gotScraping = null;
   }
 
   getNextProxy() {
@@ -37,29 +37,29 @@ class BaseMonitor {
     }
   }
 
-  async initGotScraping() {
-    if (!this.gotScraping) {
-      const module = await import('got-scraping');
-      this.gotScraping = module.gotScraping;
-    }
-    return this.gotScraping;
-  }
-
+  // Method 1: Harvest session cookies and tokens via real browser
   async harvestSession(targetUrl) {
     console.log(`🔍 [${this.name}] Harvesting session from ${targetUrl}...`);
     
     const proxy = this.getNextProxy();
     const { browser, page } = await connect({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled'],
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-blink-features=AutomationControlled',
+      ],
       customConfig: {},
       proxy: proxy ? { host: proxy.split(':')[0], port: proxy.split(':')[1] } : undefined,
     });
 
     try {
       await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+      
+      // Wait for Cloudflare/Akamai/DataDome to clear
       await page.waitForTimeout(3000);
       
+      // Extract cookies
       const cookies = await page.cookies();
       for (const cookie of cookies) {
         await this.cookieJar.setCookie(
@@ -68,6 +68,7 @@ class BaseMonitor {
         );
       }
       
+      // Extract critical headers/tokens
       const userAgent = await page.evaluate(() => navigator.userAgent);
       this.sessionHeaders = {
         'User-Agent': userAgent,
@@ -76,11 +77,17 @@ class BaseMonitor {
         'Referer': targetUrl,
       };
       
+      // Extract Akamai _abck cookie if present
       const abckCookie = cookies.find(c => c.name === '_abck');
-      if (abckCookie) console.log(`✅ [${this.name}] Harvested _abck token`);
+      if (abckCookie) {
+        console.log(`✅ [${this.name}] Harvested _abck token`);
+      }
       
+      // Extract DataDome cookie if present
       const datadomeCookie = cookies.find(c => c.name.includes('datadome'));
-      if (datadomeCookie) console.log(`✅ [${this.name}] Harvested DataDome token`);
+      if (datadomeCookie) {
+        console.log(`✅ [${this.name}] Harvested DataDome token`);
+      }
       
       console.log(`✅ [${this.name}] Session harvested (${cookies.length} cookies)`);
       return true;
@@ -92,29 +99,42 @@ class BaseMonitor {
     }
   }
 
-  async initApiClient() {
-    const gotScraping = await this.initGotScraping();
+  // Method 2: Initialize got-scraping client with harvested session
+  initApiClient() {
     this.apiClient = gotScraping.extend({
       cookieJar: this.cookieJar,
       headers: this.sessionHeaders,
       http2: true,
+      // got-scraping automatically handles TLS fingerprinting
+      // to mimic real Chrome browser
     });
+    
     console.log(`✅ [${this.name}] API client initialized with TLS spoofing`);
     return this.apiClient;
   }
 
+  // Method 3: Rotate proxy and recover from blocks
   async rotateAndRecover(targetUrl) {
     console.log(`🔄 [${this.name}] Rotating proxy and recovering session...`);
+    
+    // Ban current proxy if we have one
     const currentProxy = this.getNextProxy();
-    if (currentProxy) this.banProxy(currentProxy);
+    if (currentProxy) {
+      this.banProxy(currentProxy);
+    }
+    
+    // Clear old session
     this.cookieJar = new CookieJar();
     this.sessionHeaders = {};
+    
+    // Harvest new session with fresh proxy
     const success = await this.harvestSession(targetUrl);
     if (success) {
-      await this.initApiClient();
+      this.initApiClient();
       console.log(`✅ [${this.name}] Recovery complete`);
       return true;
     }
+    
     console.error(`❌ [${this.name}] Recovery failed`);
     return false;
   }
@@ -129,21 +149,20 @@ class BaseMonitor {
     });
   }
 
-  async randomDelay(min = 1000, max = 3000) {
-    const delay = Math.floor(Math.random() * (max - min + 1)) + min;
-    await new Promise(resolve => setTimeout(resolve, delay));
-  }
-
   async checkStock() {
     throw new Error('checkStock() must be implemented by subclass');
   }
 
   async start() {
     console.log(`🎯 [${this.name}] Starting hybrid monitor...`);
+    
+    // Initial session harvest
     if (this.urls.length > 0) {
       await this.harvestSession(this.urls[0]);
-      await this.initApiClient();
+      this.initApiClient();
     }
+    
+    // Start monitoring loop
     await this.checkStock();
     this.interval = setInterval(() => {
       this.checkStock().catch(console.error);
@@ -152,7 +171,6 @@ class BaseMonitor {
 
   async stop() {
     if (this.interval) clearInterval(this.interval);
-    if (this.browser) await this.browser.close();
     console.log(`👋 [${this.name}] Stopped`);
   }
 }
