@@ -5,13 +5,16 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
+    "start:pokemon": "node index.js pokemon",
+    "start:target": "node index.js target",
+    "start:walmart": "node index.js walmart",
+    "dev": "nodemon index.js",
+    "test": "node index.js --dry-run",
     "monitor": "node monitors/pokemon-center.js",
     "monitor:pokemon": "node monitors/pokemon-center.js",
     "monitor:target": "node monitors/target.js",
     "monitor:walmart": "node monitors/walmart.js",
-    "monitor:all": "concurrently \"npm run monitor:pokemon\" \"npm run monitor:target\" \"npm run monitor:walmart\"",
-    "test": "node -e \"require('./monitors/pokemon-center').checkStock().then(() => console.log('Test complete')).catch(console.error)\"",
-    "dev": "nodemon monitors/pokemon-center.js"
+    "monitor:all": "concurrently \"npm run monitor:pokemon\" \"npm run monitor:target\" \"npm run monitor:walmart\""
   },
   "keywords": [
     "pokemon",

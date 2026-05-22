@@ -19,11 +19,42 @@ High-performance sniping bot for Pokémon TCG drops (Pokémon Center, Target, Wa
 - [ ] Best Buy monitor
 - [ ] Proxy rotation system
 
-### Phase 3: Checkout Automation
-- [ ] Auto-checkout flows
-- [ ] Profile management
+### Phase 3: Checkout Automation 🚧 In Progress
+- [x] Profile management system (JSON-based)
+- [x] Checkout base class architecture
+- [x] Task runner with multi-monitor support
+- [x] Dry-run mode for safe testing
+- [ ] Auto-checkout flows (partial - cart add implemented)
 - [ ] Captcha solving integration
 - [ ] Queue bypass techniques
+
+#### Usage
+```bash
+# Monitor all sites
+npm start
+
+# Monitor specific site
+npm run start:pokemon
+npm run start:target
+npm run start:walmart
+
+# Dry-run mode (safe testing, no purchases)
+npm test
+
+# Development mode with auto-reload
+npm run dev
+```
+
+#### Profiles
+Profiles are stored in `profiles/` directory as JSON files:
+```json
+{
+  "name": "example",
+  "shipping": { ... },
+  "payment": { ... },
+  "email": "..."
+}
+```
 
 ### Phase 4: Advanced Features
 - [ ] Keyword + URL monitoring
