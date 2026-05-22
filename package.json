@@ -4,11 +4,13 @@
   "description": "Pokémon TCG sniping bot",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
+    "start": "concurrently \"npm run gui\" \"node index.js\"",
     "start:pokemon": "node index.js pokemon",
     "start:target": "node index.js target",
     "start:walmart": "node index.js walmart",
     "dev": "nodemon index.js",
+    "dev:gui": "nodemon gui/server.js",
+    "gui": "node gui/server.js",
     "test": "node index.js --dry-run",
     "monitor": "node monitors/pokemon-center.js",
     "monitor:pokemon": "node monitors/pokemon-center.js",
@@ -25,13 +27,16 @@
   "author": "jayjz",
   "license": "MIT",
   "dependencies": {
+    "concurrently": "^9.2.1",
     "discord.js": "^14.14.1",
     "dotenv": "^16.3.1",
+    "express": "^5.2.1",
     "got-scraping": "^4.2.1",
     "node-cron": "^3.0.3",
     "playwright-extra": "^4.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "puppeteer-real-browser": "^1.4.4",
+    "socket.io": "^4.8.3",
     "tough-cookie": "^6.0.1"
   },
   "devDependencies": {
