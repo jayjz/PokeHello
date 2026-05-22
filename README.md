@@ -4,81 +4,115 @@
 
 High-performance sniping bot for Pokémon TCG drops (Pokémon Center, Target, Walmart, etc.) - Inspired by Stellar AIO / NSB / BotBro
 
-## Roadmap
+## 🚀 Quick Start
 
-### Phase 1: Foundation (Current)
+**New to the project?** See [LOCAL-DEPLOYMENT.md](LOCAL-DEPLOYMENT.md) for complete setup instructions.
+
+```bash
+git clone https://github.com/jayjz/PokeHello.git
+cd PokeHello
+npm install
+cp .env.example .env
+# Edit .env with your settings
+npm start
+```
+
+**Dashboard:** http://localhost:3000 (after starting)
+
+## 📋 Roadmap
+
+### Phase 1: Foundation ✅ Complete
 - [x] Project structure
-- [ ] Core monitor engine (Playwright)
-- [ ] Config system
-- [ ] Discord webhook alerts
-- [ ] Basic Pokémon Center monitor
+- [x] Core monitor engine (Hybrid API/Browser)
+- [x] Config system
+- [x] Discord webhook alerts
+- [x] Pokemon Center monitor with stealth
 
-### Phase 2: Multi-Site Support
-- [ ] Target.com monitor
-- [ ] Walmart monitor
-- [ ] Best Buy monitor
-- [ ] Proxy rotation system
+### Phase 2: Multi-Site Support ✅ Complete
+- [x] Target.com monitor (API interception)
+- [x] Walmart monitor (DataDome evasion)
+- [x] Proxy rotation system
+- [x] BaseMonitor architecture
 
 ### Phase 3: Checkout Automation 🚧 In Progress
-- [x] Profile management system (JSON-based)
+- [x] Profile management system
 - [x] Checkout base class architecture
-- [x] Task runner with multi-monitor support
-- [x] Dry-run mode for safe testing
-- [ ] Auto-checkout flows (partial - cart add implemented)
+- [x] Task runner with concurrency
+- [x] Dry-run mode
+- [ ] Auto-checkout flows (partial implementation)
 - [ ] Captcha solving integration
 - [ ] Queue bypass techniques
 
-#### Usage
-```bash
-# Monitor all sites
-npm start
+### Phase 4: Production Hardening 📋 Planned
+- [ ] PM2 process management
+- [ ] Docker containerization
+- [ ] Comprehensive logging
+- [ ] Web dashboard enhancements
+- [ ] Success analytics
 
-# Monitor specific site
-npm run start:pokemon
-npm run start:target
-npm run start:walmart
+## 🛠️ Architecture
 
-# Dry-run mode (safe testing, no purchases)
-npm test
+- **Hybrid Monitoring:** Browser harvests session tokens → API client uses them with TLS spoofing
+- **Anti-Bot Evasion:** got-scraping (JA3 fingerprinting), puppeteer-real-browser, proxy rotation
+- **Multi-Site:** Modular monitors for each retailer
+- **Real-time Dashboard:** Express + Socket.IO on port 3000
 
-# Development mode with auto-reload
-npm run dev
+## 📁 Project Structure
+
+```
+tcgbot/
+├── classes/
+│   ├── BaseMonitor.js      # Core monitoring with stealth
+│   ├── CheckoutBase.js     # Abstract checkout class
+│   └── ProfileManager.js   # Encrypted profile storage
+├── monitors/
+│   ├── pokemon-center.js   # Pokemon Center monitor
+│   ├── target.js           # Target.com monitor
+│   └── walmart.js          # Walmart monitor
+├── checkouts/
+│   ├── pokemon-center.js   # Demandware checkout
+│   ├── target.js           # Target checkout
+│   └── walmart.js          # Walmart checkout
+├── gui/
+│   ├── server.js           # Express dashboard
+│   └── public/
+│       └── index.html      # Real-time UI
+├── profiles/               # Encrypted user profiles
+├── utils/
+│   └── alerts.js           # Discord webhooks
+└── index.js               # Main entry point
 ```
 
-#### Profiles
-Profiles are stored in `profiles/` directory as JSON files:
-```json
-{
-  "name": "example",
-  "shipping": { ... },
-  "payment": { ... },
-  "email": "..."
-}
+## ⚙️ Configuration
+
+See `.env.example` for all available options:
+
+```env
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+PRODUCT_URLS=https://...
+CHECK_INTERVAL=5000
+PROXY_LIST=http://user:pass@proxy:port
+PROFILE_ENCRYPTION_KEY=your-64-char-hex-key
 ```
 
-### Phase 4: Advanced Features
-- [ ] Keyword + URL monitoring
-- [ ] Restock detection
-- [ ] Analytics dashboard
-- [ ] Success tracking
+## 🚨 Legal Disclaimer
 
-### Phase 5: Optimization
-- [ ] Performance tuning
-- [ ] Error handling
-- [ ] Monitoring dashboard
-- [ ] Mobile alerts
+**Use at your own risk.** Automated purchasing may violate retailer Terms of Service and could result in account bans. This tool is for educational purposes. The authors are not responsible for any accounts terminated, orders cancelled, or legal consequences.
 
-## Quick Start
-```bash
-npm install
-cp .env.example .env
-# Configure your settings
-npm run monitor
-```
+**Security Warning:** Never commit real payment information to git. Always use environment variables or encrypted profiles.
 
-## Architecture
-- **Monitors:** Site-specific scrapers using Playwright
-- **Checkouts:** Automated purchase flows
-- **Profiles:** User data and payment info
-- **Skills:** Reusable components (proxy, captcha, etc.)
-```
+## 📄 License
+
+MIT License - See LICENSE file for details
+
+## 🤝 Contributing
+
+Pull requests welcome! Please ensure:
+- Code follows existing patterns
+- No real credentials in commits
+- Test in dry-run mode first
+- Update documentation
+
+---
+
+**Status:** Phase 3 in progress | **Last Updated:** 2026-05-22
