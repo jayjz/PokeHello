@@ -4,85 +4,78 @@ class TargetMonitor extends BaseMonitor {
   constructor() {
     super({
       name: 'Target',
-      urls: [
-        'https://www.target.com/c/pokemon-trading-card-game/-/N-5xt43',
-      ],
-      checkInterval: 3000
+      urls: process.env.TARGET_URLS 
+        ? process.env.TARGET_URLS.split(',').map(u => u.trim())
+        : ['https://www.target.com/p/pokemon-tcg/-/A-10007885'],
+      checkInterval: parseInt(process.env.CHECK_INTERVAL) || 3000
     });
-    this.sessionCookies = null;
   }
 
   async checkStock() {
-    if (!this.context) {
-      await this.initBrowser();
-      // Load session cookies if available
-      if (this.sessionCookies) {
-        await this.context.addCookies(this.sessionCookies);
-      }
+    if (!this.apiClient) {
+      console.error(`[${this.name}] API client not initialized`);
+      return;
     }
 
-    const page = await this.context.newPage();
-    
-    // Intercept API calls to monitor fulfillment data
-    await page.route('**/api/products/**', async route => {
-      const response = await route.fetch();
-      const json = await response.json().catch(() => null);
-      
-      if (json && this.checkFulfillmentApi(json)) {
-        await this.handleApiStockFound(json, page.url());
-      }
-      
-      await route.continue();
-    });
-
-    try {
-      for (const url of this.urls) {
-        await page.goto(url, { waitUntil: 'networkidle' });
-        await this.randomDelay(2000, 3000);
-        
-        // Check for queue/waiting room
-        const inQueue = await page.$('text=/queue|waiting room|please wait/i');
-        if (inQueue) {
-          console.log(`[${this.name}] In queue, holding session...`);
-          await this.randomDelay(5000, 10000);
+    for (const url of this.urls) {
+      try {
+        // Extract TCIN from URL
+        const tcin = url.match(/\/A-(\d+)/)?.[1] || url.match(/A-(\d+)/)?.[1];
+        if (!tcin) {
+          console.log(`[${this.name}] Could not extract TCIN from ${url}`);
           continue;
         }
+
+        // Target API endpoint (RedSky API)
+        const apiUrl = `https://redsky.target.com/redsky_aggregations/v1/web/pdp_client_v1?key=ff457966e64d5e877fdbad070f276d18ecec4a01&tcin=${tcin}`;
+        
+        const response = await this.apiClient(apiUrl, {
+          timeout: { request: 10000 },
+          retry: { limit: 2 },
+          headers: {
+            'Accept': 'application/json',
+            'Referer': 'https://www.target.com/'
+          }
+        }).json();
+
+        // Parse Target API response
+        const product = response?.data?.product;
+        const fulfillment = product?.fulfillment;
+        
+        const inStock = fulfillment?.shipping_options?.availability_status === 'IN_STOCK' ||
+                       fulfillment?.pickup_options?.[0]?.availability_status === 'IN_STOCK';
+        
+        const productName = product?.item?.product_description?.title || 'Target Product';
+        const price = product?.price?.formatted_current_price || 'N/A';
+
+        if (inStock) {
+          console.log(`🔥 [${this.name}] IN STOCK: ${productName}`);
+          
+          await this.sendAlert({
+            title: '🎯 TARGET RESTOCK!',
+            description: `**${productName}**\n💰 ${price}`,
+            url: url,
+            color: 0xff0000,
+            fields: [
+              { name: 'Status', value: '✅ IN STOCK (API)', inline: true },
+              { name: 'TCIN', value: tcin, inline: true }
+            ]
+          });
+        } else {
+          console.log(`❌ [${this.name}] Out of stock: ${productName}`);
+        }
+
+        await new Promise(r => setTimeout(r, Math.random() * 2000 + 1000));
+        
+      } catch (error) {
+        if (error.response?.statusCode === 403 || error.response?.statusCode === 429 || error.response?.statusCode === 403) {
+          console.log(`[${this.name}] Blocked (Akamai), rotating...`);
+          await this.rotateAndRecover(url);
+        } else {
+          console.error(`[${this.name}] Error:`, error.message);
+        }
       }
-    } catch (error) {
-      console.error(`[${this.name}] Error:`, error.message);
-    } finally {
-      // Save cookies for next run
-      this.sessionCookies = await this.context.cookies();
-      await page.close();
     }
-  }
-
-  checkFulfillmentApi(data) {
-    // Check Target's fulfillment API response for in-stock items
-    // This is a simplified example - actual implementation would parse the API structure
-    try {
-      const items = data?.data?.product?.children || [];
-      return items.some(item => 
-        item?.fulfillment?.shipping_options?.availability_status === 'IN_STOCK'
-      );
-    } catch {
-      return false;
-    }
-  }
-
-  async handleApiStockFound(data, url) {
-    console.log(`🔥 [${this.name}] API indicates STOCK!`);
-    
-    await this.sendAlert({
-      title: '🎯 TARGET RESTOCK DETECTED!',
-      description: 'API indicates items available - check site immediately',
-      url: url,
-      color: 0xff0000,
-      fields: [
-        { name: 'Status', value: '✅ API STOCK SIGNAL', inline: true },
-        { name: 'Site', value: 'Target.com', inline: true }
-      ]
-    });
   }
 }
 

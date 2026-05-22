@@ -4,79 +4,78 @@ class WalmartMonitor extends BaseMonitor {
   constructor() {
     super({
       name: 'Walmart',
-      urls: [
-        'https://www.walmart.com/browse/toys/pokemon-trading-cards/4171_4186_1107343',
-      ],
-      checkInterval: 4000
+      urls: process.env.WALMART_URLS 
+        ? process.env.WALMART_URLS.split(',').map(u => u.trim())
+        : ['https://www.walmart.com/ip/12345678'],
+      checkInterval: parseInt(process.env.CHECK_INTERVAL) || 4000
     });
   }
 
   async checkStock() {
-    if (!this.context) {
-      await this.initBrowser();
+    if (!this.apiClient) {
+      console.error(`[${this.name}] API client not initialized`);
+      return;
     }
 
-    const page = await this.context.newPage();
-    
-    // Aggressive stealth for Walmart/DataDome
-    await page.setExtraHTTPHeaders({
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'Accept-Language': 'en-US,en;q=0.5',
-      'Accept-Encoding': 'gzip, deflate',
-      'DNT': '1',
-      'Connection': 'keep-alive',
-      'Upgrade-Insecure-Requests': '1',
-    });
-
-    try {
-      for (const url of this.urls) {
-        const response = await page.goto(url, { 
-          waitUntil: 'domcontentloaded',
-          timeout: 30000
-        });
-
-        // Check for bot detection
-        if (response.status() === 403 || response.status() === 429) {
-          console.log(`[${this.name}] Blocked (${response.status()}), rotating proxy...`);
-          this.banProxy(this.context._proxy);
-          await this.context.close();
-          this.context = null;
-          return;
-        }
-
-        // Check for CAPTCHA
-        const captcha = await page.$('text=/captcha|verify you are human/i');
-        if (captcha) {
-          console.log(`[${this.name}] CAPTCHA detected, skipping...`);
+    for (const url of this.urls) {
+      try {
+        // Extract item ID from URL
+        const itemId = url.match(/\/ip\/(\d+)/)?.[1];
+        if (!itemId) {
+          console.log(`[${this.name}] Could not extract item ID from ${url}`);
           continue;
         }
 
-        await this.randomDelay(2000, 3500);
+        // Walmart API endpoint
+        const apiUrl = `https://www.walmart.com/api/v3/items/${itemId}`;
         
-        // Look for add to cart buttons
-        const inStock = await page.$('button:has-text("Add to cart"):not([disabled])');
+        const response = await this.apiClient(apiUrl, {
+          timeout: { request: 10000 },
+          retry: { limit: 2 },
+          headers: {
+            'Accept': 'application/json',
+            'WM_SEC.ACCESS_TOKEN': process.env.WALMART_TOKEN || '',
+            'Referer': 'https://www.walmart.com/'
+          }
+        }).json();
+
+        // Parse Walmart API response
+        const product = response?.product;
+        const buyBox = product?.buyBox;
         
+        const inStock = buyBox?.products?.[0]?.availabilityStatus === 'IN_STOCK' ||
+                       product?.availabilityStatus === 'IN_STOCK';
+        
+        const productName = product?.name || 'Walmart Product';
+        const price = buyBox?.products?.[0]?.priceMap?.price?.toString() || 'N/A';
+
         if (inStock) {
-          console.log(`🔥 [${this.name}] POTENTIAL STOCK FOUND`);
+          console.log(`🔥 [${this.name}] IN STOCK: ${productName}`);
           
           await this.sendAlert({
-            title: '🎯 WALMART STOCK ALERT',
-            description: 'Add to cart button detected - verify manually',
+            title: '🎯 WALMART RESTOCK!',
+            description: `**${productName}**\n💰 $${price}`,
             url: url,
             color: 0x0071ce,
             fields: [
-              { name: 'Status', value: '⚠️ VERIFY MANUALLY', inline: true },
-              { name: 'Site', value: 'Walmart.com', inline: true }
+              { name: 'Status', value: '✅ IN STOCK (API)', inline: true },
+              { name: 'Method', value: 'Hybrid API', inline: true }
             ]
           });
+        } else {
+          console.log(`❌ [${this.name}] Out of stock: ${productName}`);
         }
+
+        await new Promise(r => setTimeout(r, Math.random() * 2000 + 1500));
         
-        await this.randomDelay(3000, 5000);
+      } catch (error) {
+        if (error.response?.statusCode === 403 || error.response?.statusCode === 429) {
+          console.log(`[${this.name}] Blocked by DataDome, rotating...`);
+          await this.rotateAndRecover(url);
+        } else {
+          console.error(`[${this.name}] Error:`, error.message);
+        }
       }
-    } catch (error) {
-      console.error(`[${this.name}] Error:`, error.message);
-    } finally {
-      await page.close();
     }
   }
 }

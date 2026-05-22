@@ -1,4 +1,6 @@
-const { chromium } = require('playwright');
+const { gotScraping } = require('got-scraping');
+const { connect } = require('puppeteer-real-browser');
+const { CookieJar } = require('tough-cookie');
 const { sendDiscordAlert } = require('../utils/alerts');
 
 class BaseMonitor {
@@ -11,77 +13,132 @@ class BaseMonitor {
       : [];
     this.proxyIndex = 0;
     this.bannedProxies = new Set();
-    this.browser = null;
-    this.context = null;
+    this.cookieJar = new CookieJar();
+    this.apiClient = null;
+    this.sessionHeaders = {};
   }
 
-  // Proxy rotation with ban support
   getNextProxy() {
     if (this.proxies.length === 0) return null;
-    
     let attempts = 0;
     while (attempts < this.proxies.length) {
       const proxy = this.proxies[this.proxyIndex];
       this.proxyIndex = (this.proxyIndex + 1) % this.proxies.length;
-      
-      if (!this.bannedProxies.has(proxy)) {
-        return proxy;
-      }
+      if (!this.bannedProxies.has(proxy)) return proxy;
       attempts++;
     }
-    return null; // All proxies banned
+    return null;
   }
 
   banProxy(proxy) {
     if (proxy) {
       this.bannedProxies.add(proxy);
-      console.log(`🚫 Banned proxy: ${proxy}`);
+      console.log(`🚫 [${this.name}] Banned proxy: ${proxy}`);
     }
   }
 
-  // Stealth browser initialization
-  async initBrowser() {
-    const proxy = this.getNextProxy();
+  // Method 1: Harvest session cookies and tokens via real browser
+  async harvestSession(targetUrl) {
+    console.log(`🔍 [${this.name}] Harvesting session from ${targetUrl}...`);
     
-    this.browser = await chromium.launch({
+    const proxy = this.getNextProxy();
+    const { browser, page } = await connect({
       headless: true,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-blink-features=AutomationControlled',
-        '--disable-dev-shm-usage',
       ],
-      proxy: proxy ? { server: proxy } : undefined,
+      customConfig: {},
+      proxy: proxy ? { host: proxy.split(':')[0], port: proxy.split(':')[1] } : undefined,
     });
 
-    this.context = await this.browser.newContext({
-      userAgent: process.env.USER_AGENT || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      viewport: { width: 1920, height: 1080 },
-      // Stealth settings
-      javaScriptEnabled: true,
-      bypassCSP: true,
-    });
-
-    // Add stealth evasions
-    await this.context.addInitScript(() => {
-      // Override navigator.webdriver
-      Object.defineProperty(navigator, 'webdriver', { get: () => false });
+    try {
+      await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
       
-      // Override plugins
-      Object.defineProperty(navigator, 'plugins', {
-        get: () => [1, 2, 3, 4, 5],
-      });
+      // Wait for Cloudflare/Akamai/DataDome to clear
+      await page.waitForTimeout(3000);
       
-      // Override languages
-      Object.defineProperty(navigator, 'languages', {
-        get: () => ['en-US', 'en'],
-      });
-    });
-
-    return this.context;
+      // Extract cookies
+      const cookies = await page.cookies();
+      for (const cookie of cookies) {
+        await this.cookieJar.setCookie(
+          `${cookie.name}=${cookie.value}; Domain=${cookie.domain}; Path=${cookie.path}`,
+          targetUrl
+        );
+      }
+      
+      // Extract critical headers/tokens
+      const userAgent = await page.evaluate(() => navigator.userAgent);
+      this.sessionHeaders = {
+        'User-Agent': userAgent,
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': targetUrl,
+      };
+      
+      // Extract Akamai _abck cookie if present
+      const abckCookie = cookies.find(c => c.name === '_abck');
+      if (abckCookie) {
+        console.log(`✅ [${this.name}] Harvested _abck token`);
+      }
+      
+      // Extract DataDome cookie if present
+      const datadomeCookie = cookies.find(c => c.name.includes('datadome'));
+      if (datadomeCookie) {
+        console.log(`✅ [${this.name}] Harvested DataDome token`);
+      }
+      
+      console.log(`✅ [${this.name}] Session harvested (${cookies.length} cookies)`);
+      return true;
+    } catch (error) {
+      console.error(`❌ [${this.name}] Session harvest failed:`, error.message);
+      return false;
+    } finally {
+      await browser.close();
+    }
   }
 
-  // Discord alert dispatcher
+  // Method 2: Initialize got-scraping client with harvested session
+  initApiClient() {
+    this.apiClient = gotScraping.extend({
+      cookieJar: this.cookieJar,
+      headers: this.sessionHeaders,
+      http2: true,
+      // got-scraping automatically handles TLS fingerprinting
+      // to mimic real Chrome browser
+    });
+    
+    console.log(`✅ [${this.name}] API client initialized with TLS spoofing`);
+    return this.apiClient;
+  }
+
+  // Method 3: Rotate proxy and recover from blocks
+  async rotateAndRecover(targetUrl) {
+    console.log(`🔄 [${this.name}] Rotating proxy and recovering session...`);
+    
+    // Ban current proxy if we have one
+    const currentProxy = this.getNextProxy();
+    if (currentProxy) {
+      this.banProxy(currentProxy);
+    }
+    
+    // Clear old session
+    this.cookieJar = new CookieJar();
+    this.sessionHeaders = {};
+    
+    // Harvest new session with fresh proxy
+    const success = await this.harvestSession(targetUrl);
+    if (success) {
+      this.initApiClient();
+      console.log(`✅ [${this.name}] Recovery complete`);
+      return true;
+    }
+    
+    console.error(`❌ [${this.name}] Recovery failed`);
+    return false;
+  }
+
   async sendAlert(data) {
     await sendDiscordAlert({
       title: data.title || `${this.name} Alert`,
@@ -92,40 +149,29 @@ class BaseMonitor {
     });
   }
 
-  // Random delay with jitter
-  async randomDelay(min = 1000, max = 3000) {
-    const delay = Math.floor(Math.random() * (max - min + 1)) + min;
-    await new Promise(resolve => setTimeout(resolve, delay));
-  }
-
-  // Abstract method - must be implemented by subclasses
   async checkStock() {
     throw new Error('checkStock() must be implemented by subclass');
   }
 
-  // Start monitoring loop
   async start() {
-    console.log(`🎯 ${this.name} monitor starting...`);
-    console.log(`📊 Monitoring ${this.urls.length} URL(s)`);
+    console.log(`🎯 [${this.name}] Starting hybrid monitor...`);
     
-    // Initial check
-    await this.checkStock().catch(console.error);
+    // Initial session harvest
+    if (this.urls.length > 0) {
+      await this.harvestSession(this.urls[0]);
+      this.initApiClient();
+    }
     
-    // Set up interval
+    // Start monitoring loop
+    await this.checkStock();
     this.interval = setInterval(() => {
       this.checkStock().catch(console.error);
     }, this.checkInterval);
   }
 
-  // Stop monitoring
   async stop() {
-    if (this.interval) {
-      clearInterval(this.interval);
-    }
-    if (this.browser) {
-      await this.browser.close();
-    }
-    console.log(`👋 ${this.name} monitor stopped`);
+    if (this.interval) clearInterval(this.interval);
+    console.log(`👋 [${this.name}] Stopped`);
   }
 }
 
