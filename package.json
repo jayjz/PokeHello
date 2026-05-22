@@ -1,0 +1,24 @@
+{
+  "name": "pokehello",
+  "version": "0.1.0",
+  "description": "Pokémon TCG sniping bot",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "monitor": "node monitors/pokemon-center.js",
+    "dev": "nodemon index.js"
+  },
+  "keywords": ["pokemon", "tcg", "bot", "sniping"],
+  "author": "jayjz",
+  "license": "MIT",
+  "dependencies": {
+    "playwright": "^1.40.0",
+    "axios": "^1.6.0",
+    "node-cron": "^3.0.3",
+    "dotenv": "^16.3.1",
+    "discord.js": "^14.14.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
