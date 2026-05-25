@@ -50,6 +50,15 @@ npm start
 - [ ] Web dashboard enhancements
 - [ ] Success analytics
 
+### Phase 4.1: Sam's Club Support ✅ Complete
+- [x] Sam's Club monitor with hybrid API scraping
+- [x] Fulfillment API integration (pickup/ship availability)
+- [x] Sam's Club checkout skeleton (ATC + order submission)
+- [x] Membership validation handling
+- [x] Club-specific inventory checking
+- [ ] Production testing with real membership
+- [ ] Payment gateway integration (requires PCI compliance)
+
 ## 🛠️ Architecture
 
 - **Hybrid Monitoring:** Browser harvests session tokens → API client uses them with TLS spoofing
@@ -68,11 +77,13 @@ tcgbot/
 ├── monitors/
 │   ├── pokemon-center.js   # Pokemon Center monitor
 │   ├── target.js           # Target.com monitor
-│   └── walmart.js          # Walmart monitor
+│   ├── walmart.js          # Walmart monitor
+│   └── sams-club.js        # Sam's Club monitor (Prismatic SPC)
 ├── checkouts/
 │   ├── pokemon-center.js   # Demandware checkout
 │   ├── target.js           # Target checkout
-│   └── walmart.js          # Walmart checkout
+│   ├── walmart.js          # Walmart checkout
+│   └── sams-club.js        # Sam's Club checkout
 ├── gui/
 │   ├── server.js           # Express dashboard
 │   └── public/
