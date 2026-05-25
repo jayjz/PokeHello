@@ -8,16 +8,23 @@ High-performance sniping bot for Pokémon TCG drops (Pokémon Center, Target, Wa
 
 **New to the project?** See [LOCAL-DEPLOYMENT.md](LOCAL-DEPLOYMENT.md) for complete setup instructions.
 
+**Windows users:** We recommend WSL2 (Windows Subsystem for Linux) with Ubuntu 24.04 - see the deployment guide for step-by-step WSL2 setup.
+
 ```bash
 git clone https://github.com/jayjz/PokeHello.git
 cd PokeHello
 npm install
 cp .env.example .env
-# Edit .env with your settings
+# Edit .env with your settings (see Discord webhook setup in deployment guide)
 npm start
 ```
 
 **Dashboard:** http://localhost:3000 (after starting)
+
+**First time?** Don't forget to:
+1. Set up Discord webhook for alerts (see LOCAL-DEPLOYMENT.md)
+2. Configure your `.env` file with product URLs
+3. Generate encryption key: `openssl rand -hex 32`
 
 ## 📋 Roadmap
 
