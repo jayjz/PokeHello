@@ -56,7 +56,7 @@ class BaseMonitor {
 
   log(level, message, data = null) {
     const timestamp = new Date().toISOString();
-    console.log(`[${timestamp}] [${level}] [${this.name}] ${message}`, data || '');
+    console.log(`[${timestamp}] [${level}] [${this.name}] ${message}`, data ? JSON.stringify(data).slice(0, 300) : '');
   }
 
   async initGotScraping() {
@@ -67,7 +67,6 @@ class BaseMonitor {
     return this.gotScraping;
   }
 
-  // Fixed harvestSession with compatible delay
   async harvestSession(targetUrl) {
     this.log('INFO', `Harvesting session from ${targetUrl}`);
 
@@ -82,21 +81,14 @@ class BaseMonitor {
         '--disable-blink-features=AutomationControlled',
         '--disable-features=IsolateOrigins,site-per-process'
       ],
-      proxy: proxy ? { 
-        host: proxy.split(':')[0], 
-        port: parseInt(proxy.split(':')[1]) 
-      } : undefined,
+      proxy: proxy ? { host: proxy.split(':')[0], port: parseInt(proxy.split(':')[1]) } : undefined,
     });
 
     try {
       await page.setUserAgent(randomUA);
-
-      await page.goto(targetUrl, { 
-        waitUntil: 'networkidle2', 
-        timeout: 30000 
-      });
-
-      // Fixed: Use Promise-based delay instead of page.waitForTimeout
+      await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+      
+      // Robust delay
       await new Promise(resolve => setTimeout(resolve, 2500 + Math.random() * 1500));
 
       const cookies = await page.cookies();
