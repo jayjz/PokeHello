@@ -7,7 +7,7 @@ class BaseMonitor {
   constructor(options = {}) {
     this.name = options.name || 'BaseMonitor';
     this.urls = options.urls || [];
-    this.baseInterval = options.checkInterval || 8000; // Default 8s
+    this.baseInterval = options.checkInterval || 8000;
     this.currentInterval = this.baseInterval;
     
     this.proxies = process.env.PROXY_LIST
@@ -21,27 +21,20 @@ class BaseMonitor {
     this.gotScraping = null;
     this.apiClient = null;
     this.lastHarvest = 0;
-    this.harvestInterval = 90000; // Re-harvest session every 90s
+    this.harvestInterval = 90000; // Re-harvest every 90s
     this.isRunning = false;
 
-    // === Realistic 2026 User Agent Pool ===
-    // Rotate these to reduce fingerprinting
+    // Realistic 2026 User Agent Pool
     this.userAgents = [
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36',
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0',
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) Gecko/20100101 Firefox/134.0',
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15',
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15',
-      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/134.0.0.0 Safari/537.36'
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36'
     ];
   }
 
-  // Get next clean proxy
   getNextProxy() {
     if (this.proxies.length === 0) return null;
     let attempts = 0;
@@ -64,7 +57,6 @@ class BaseMonitor {
   log(level, message, data = null) {
     const timestamp = new Date().toISOString();
     console.log(`[${timestamp}] [${level}] [${this.name}] ${message}`, data || '');
-    // TODO: Later pipe to Winston/Pino for file + structured logs
   }
 
   async initGotScraping() {
@@ -75,7 +67,7 @@ class BaseMonitor {
     return this.gotScraping;
   }
 
-  // Harvest fresh session via real browser (cookies, headers, tokens)
+  // Fixed harvestSession with compatible delay
   async harvestSession(targetUrl) {
     this.log('INFO', `Harvesting session from ${targetUrl}`);
 
@@ -97,7 +89,6 @@ class BaseMonitor {
     });
 
     try {
-      // Force random User-Agent before navigation
       await page.setUserAgent(randomUA);
 
       await page.goto(targetUrl, { 
@@ -105,14 +96,14 @@ class BaseMonitor {
         timeout: 30000 
       });
 
-      await page.waitForTimeout(2500 + Math.random() * 1500);
+      // Fixed: Use Promise-based delay instead of page.waitForTimeout
+      await new Promise(resolve => setTimeout(resolve, 2500 + Math.random() * 1500));
 
       const cookies = await page.cookies();
       for (const cookie of cookies) {
         await this.cookieJar.setCookie(`${cookie.name}=${cookie.value}`, targetUrl);
       }
 
-      // Use our chosen UA instead of browser default
       this.sessionHeaders = {
         'User-Agent': randomUA,
         'Accept': 'application/json, text/plain, */*',
@@ -147,7 +138,6 @@ class BaseMonitor {
     return this.apiClient;
   }
 
-  // Smart recovery with backoff
   async rotateAndRecover(targetUrl) {
     this.log('WARN', 'Rotating proxy and recovering session...');
     const currentProxy = this.getNextProxy();
@@ -159,10 +149,10 @@ class BaseMonitor {
     const success = await this.harvestSession(targetUrl);
     if (success) {
       await this.initApiClient();
-      this.currentInterval = Math.max(8000, this.baseInterval); // Reset backoff
+      this.currentInterval = Math.max(8000, this.baseInterval);
       return true;
     }
-    this.currentInterval = Math.min(45000, this.currentInterval * 1.5); // Exponential backoff
+    this.currentInterval = Math.min(45000, this.currentInterval * 1.5);
     return false;
   }
 
@@ -170,7 +160,6 @@ class BaseMonitor {
     await sendDiscordAlert(data);
   }
 
-  // Jittered delay to avoid patterns
   async randomDelay(min = 800, max = 2200) {
     const delay = Math.floor(Math.random() * (max - min + 1)) + min;
     await new Promise(r => setTimeout(r, delay));
@@ -190,10 +179,8 @@ class BaseMonitor {
       await this.initApiClient();
     }
 
-    // Initial check
     this.checkStock().catch(e => this.log('ERROR', 'Initial check failed', e.message));
 
-    // Adaptive polling loop
     this.interval = setInterval(async () => {
       if (!this.isRunning) return;
       try {
