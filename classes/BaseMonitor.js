@@ -21,10 +21,9 @@ class BaseMonitor {
     this.gotScraping = null;
     this.apiClient = null;
     this.lastHarvest = 0;
-    this.harvestInterval = 90000; // Re-harvest every 90s
+    this.harvestInterval = 90000;
     this.isRunning = false;
 
-    // Realistic 2026 User Agent Pool
     this.userAgents = [
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
@@ -56,7 +55,8 @@ class BaseMonitor {
 
   log(level, message, data = null) {
     const timestamp = new Date().toISOString();
-    console.log(`[${timestamp}] [${level}] [${this.name}] ${message}`, data ? JSON.stringify(data).slice(0, 300) : '');
+    const extra = data ? ` | ${JSON.stringify(data).slice(0, 250)}` : '';
+    console.log(`[${timestamp}] [${level}] [${this.name}] ${message}${extra}`);
   }
 
   async initGotScraping() {
@@ -88,8 +88,8 @@ class BaseMonitor {
       await page.setUserAgent(randomUA);
       await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
       
-      // Robust delay
-      await new Promise(resolve => setTimeout(resolve, 2500 + Math.random() * 1500));
+      // FIXED: No more waitForTimeout
+      await new Promise(resolve => setTimeout(resolve, 2800 + Math.random() * 1200));
 
       const cookies = await page.cookies();
       for (const cookie of cookies) {
@@ -106,7 +106,7 @@ class BaseMonitor {
         'Sec-Fetch-Site': 'same-origin'
       };
 
-      this.log('SUCCESS', `Session harvested (${cookies.length} cookies) | UA: ${randomUA.substring(0, 60)}...`);
+      this.log('SUCCESS', `Session harvested (${cookies.length} cookies) | UA: ${randomUA.substring(0, 55)}...`);
       this.lastHarvest = Date.now();
       return true;
     } catch (error) {
