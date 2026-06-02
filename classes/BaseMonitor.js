@@ -9,9 +9,11 @@ class BaseMonitor {
     this.urls = options.urls || [];
     this.baseInterval = options.checkInterval || 8000; // Default 8s
     this.currentInterval = this.baseInterval;
+    
     this.proxies = process.env.PROXY_LIST
       ? process.env.PROXY_LIST.split(',').map(p => p.trim()).filter(Boolean)
       : [];
+    
     this.proxyIndex = 0;
     this.bannedProxies = new Set();
     this.cookieJar = new CookieJar();
@@ -21,6 +23,22 @@ class BaseMonitor {
     this.lastHarvest = 0;
     this.harvestInterval = 90000; // Re-harvest session every 90s
     this.isRunning = false;
+
+    // === Realistic 2026 User Agent Pool ===
+    // Rotate these to reduce fingerprinting
+    this.userAgents = [
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0',
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) Gecko/20100101 Firefox/134.0',
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15',
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15',
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/134.0.0.0 Safari/537.36'
+    ];
   }
 
   // Get next clean proxy
@@ -39,7 +57,7 @@ class BaseMonitor {
   banProxy(proxy) {
     if (proxy) {
       this.bannedProxies.add(proxy);
-      this.log(`🚫 Banned proxy: ${proxy}`);
+      this.log('WARN', `Banned proxy: ${proxy}`);
     }
   }
 
@@ -60,16 +78,33 @@ class BaseMonitor {
   // Harvest fresh session via real browser (cookies, headers, tokens)
   async harvestSession(targetUrl) {
     this.log('INFO', `Harvesting session from ${targetUrl}`);
+
     const proxy = this.getNextProxy();
-    
+    const randomUA = this.userAgents[Math.floor(Math.random() * this.userAgents.length)];
+
     const { browser, page } = await connect({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled'],
-      proxy: proxy ? { host: proxy.split(':')[0], port: parseInt(proxy.split(':')[1]) } : undefined,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-blink-features=AutomationControlled',
+        '--disable-features=IsolateOrigins,site-per-process'
+      ],
+      proxy: proxy ? { 
+        host: proxy.split(':')[0], 
+        port: parseInt(proxy.split(':')[1]) 
+      } : undefined,
     });
 
     try {
-      await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+      // Force random User-Agent before navigation
+      await page.setUserAgent(randomUA);
+
+      await page.goto(targetUrl, { 
+        waitUntil: 'networkidle2', 
+        timeout: 30000 
+      });
+
       await page.waitForTimeout(2500 + Math.random() * 1500);
 
       const cookies = await page.cookies();
@@ -77,16 +112,18 @@ class BaseMonitor {
         await this.cookieJar.setCookie(`${cookie.name}=${cookie.value}`, targetUrl);
       }
 
-      const userAgent = await page.evaluate(() => navigator.userAgent);
+      // Use our chosen UA instead of browser default
       this.sessionHeaders = {
-        'User-Agent': userAgent,
+        'User-Agent': randomUA,
         'Accept': 'application/json, text/plain, */*',
         'Accept-Language': 'en-US,en;q=0.9',
         'Referer': targetUrl,
         'Cache-Control': 'no-cache',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-origin'
       };
 
-      this.log('SUCCESS', `Session harvested (${cookies.length} cookies)`);
+      this.log('SUCCESS', `Session harvested (${cookies.length} cookies) | UA: ${randomUA.substring(0, 60)}...`);
       this.lastHarvest = Date.now();
       return true;
     } catch (error) {
